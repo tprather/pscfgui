@@ -1,0 +1,13 @@
+{
+  "name": "pscf",
+  "main": "index.html",
+  "chromium-args": "--mixed-context",
+  "window": {
+    "min_width" : 800,
+    "width"     : 800,
+    "max_width" : 800,
+    "min_height": 600,
+    "height"    : 600,
+    "max_height": 600
+  }
+}

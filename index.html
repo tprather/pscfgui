@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="ISO-8859-1">
+    <title>PSCF</title>
+    <style>
+        html, body {
+            height: 95%
+        }
+    </style>
+</head>
+<body>
+    <h2>PSCF - Polymer Self-Consistent Field Theory Computation</h2>
+    <div>
+        <button id="ifileb">Select Input File</button>
+        <input  id="ifilei" type="file" style="display:none"/>
+        <span   id="ifilen"></span>
+    </div>
+    <div>
+        <button id="eabort">Execute</button>
+    </div>
+    <div id="feplot">
+    </div>
+    <div>
+        <textarea id="stdout" style="width:100%;height:300px;border: 1px solid gray; overflow-y:scroll;"></textarea>
+    </div>
+
+    <script>
+	    // <![CDATA[
+
+        // Loading with src tag not working in node.js.  Load with require.
+        window.$ = window.jQuery = require('./jquery-3.1.0.js');
+        require('./jquery.jqplot.min.js');
+        
+        var path      = require('path');
+        var fs        = require('fs');
+        var spawn     = require('child_process').spawn;
+        var pscf      = undefined;
+        var pscfAbort = false;
+
+	    function notePscfState () {
+	    	if (pscf == undefined) {
+                $('#eabort').text('Execute');
+	    		if ($('#ifilei').val().trim()) {
+                    $('#eabort').attr('disabled',false);
+	    		} else {
+                    $('#eabort').attr('disabled',true );
+	    		}
+	    	} else {
+                $('#eabort').text('Abort');
+	    		if (!pscfAbort) {
+                    $('#eabort').attr('disabled',false);
+	    		} else {
+                    $('#eabort').attr('disabled',true );
+	    		}
+	    	}
+	    }
+
+        function drawFreeEnergyPlot ( elementID, freeEnergy, freeEnergyPlotRange, w, h ) {
+    	  var jPlot = undefined;
+    	  pFreeEnergy = (freeEnergy.length) ? freeEnergy : null; 
+    	  if ($('#'+elementID).length > 0) {
+    	    w = w || 150;
+    	    h = h || 100;
+    	    try {
+    	      jPlot = $.jqplot(
+    	          elementID,
+    	          pFreeEnergy,
+    	          {
+    	            width          : w,
+    	            height         : h,
+    	            axesDefaults   : { numberTicks : 5, tickOptions : { show : true, showLabel : false, showGridLine : true } },
+    	            axes : {
+    	              xaxis        : { min : freeEnergyPlotRange[0], max : freeEnergyPlotRange[1] },
+    	              yaxis        : { min : freeEnergyPlotRange[2], max : freeEnergyPlotRange[3] },
+    	            },
+    	            seriesDefaults : { showMarker  : false },
+    	            legend         : { show        : false },
+    	            noDataIndicator: { show        : true, 
+    	                               indicator   : "No Data Available", 
+    	                               axes        : { 
+    	                                   numberTicks : 5, 
+    	                                   xaxis: { min : 0., max: 10. , 
+    	                                            tickOptions : { formatString : "%d" }, 
+    	                                            show: true 
+    	                                        }, 
+    	                                   yaxis: { min : 0., max: 10. , 
+    	                                            tickOptions : { formatString : "%d" }, 
+    	                                            show: true 
+    	                                        } 
+    	                                }
+    	                }
+    	          }
+    	      );
+    	    } catch (err) {
+    	        console.log("Error drawing FreeEnergy: " + err); 
+    	    }
+    	  }
+    	  return jPlot;
+    	}
+	    
+        var freeEnergyList = [];
+        var freeEnergyPlotRange = [0.,1.,0.,1.];
+        var iterationCount  = 0;
+        function processStdout ( d ) {
+            //$('#stdout').append(data);
+            var stdout = document.getElementById('stdout');
+            stdout.value += d;
+            stdout.scrollTop = stdout.scrollHeight;
+            
+            var reIterationStart  = /^[*]{10,}/;
+            var reIterationCount  = /^Iteration +([0-9]+)/;
+            var reIterationEnergy = /^f_Helmholtz += +([\-+0-9.Ee]+)/;
+            var lines = d.toString().replace(/\r\n/g,"\n").split('\n');
+            for (var lnum in lines) {
+            	line = lines[lnum];
+            	var match = null; 
+                if ((match = reIterationStart.exec(line)) != null) {
+                    console.log('Iteration start');
+                }
+                if ((match = reIterationCount.exec(line)) != null) {
+                    console.log('Iteration = '+match[1]);
+                	iterationCount = match[1];
+                    freeEnergyPlotRange[0] = Math.min(freeEnergyPlotRange[0],iterationCount);
+                    freeEnergyPlotRange[1] = Math.max(freeEnergyPlotRange[1],iterationCount);
+                }
+                if ((match = reIterationEnergy.exec(line)) != null) {
+                    console.log('Free Energy = '+match[1]);
+                    var freeEnergy = match[1];
+                	freeEnergyList.push([iterationCount,freeEnergy]);
+                    freeEnergyPlotRange[2] = Math.min(freeEnergyPlotRange[2],freeEnergy);
+                    freeEnergyPlotRange[3] = Math.max(freeEnergyPlotRange[3],freeEnergy);
+                    drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,700,200);
+                }
+            }
+        }
+	    
+	    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
+	    $('#ifilei').on('change',function(){$('#ifilen').text($('#ifilei').val());notePscfState();});
+	    $('#eabort').on('click' ,function(){
+            ifilePath = $('#ifilei').val();
+            pscf = spawn(
+            	'pscf',
+            	[],
+            	{
+            		cwd   : path.dirname(ifilePath),
+            	    stdio : [
+            	        fs.openSync(ifilePath,'r'),
+            	        'pipe',
+            	        'pipe'
+            	    ]
+            	}
+            );
+            pscf.stdout.on('data',processStdout);
+            /*
+            pscf.stderr.on('data',function(data){
+            	$('#stdout').append('<span style="font-color:red">'+data+'</span>');
+            });
+            */
+	    });
+
+        drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,700,200);
+	    
+	    notePscfState();
+	    // ]]>
+    </script>
+</body>
+</html>
