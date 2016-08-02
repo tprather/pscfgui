@@ -9,6 +9,20 @@
         }
     </style>
     <link   rel="stylesheet" type="text/css" href="./jquery.jqplot.min.css"/>
+    <script>
+        // <![CDATA[
+        // Loading with script/src tag isn't working with jquery in node.js.
+        // Get it loaded here as node.js wants it, then load the rest normally.
+        window.$ = window.jQuery = require('./jquery-3.1.0.js');
+        // ]]>
+	</script>
+	<script src="./jquery.jqplot.min.js"></script>
+	<script src="./jcanvas.js"></script>
+	<script src="./d3.v3.min.js"></script>
+	<script src="./dex.min.js"></script>
+	<script src="./dex/component/d3/ParallelCoordinates.js"></script>
+	<script src="./three.min.js"></script>
+	<script src="./DensityPlot3D.js"></script>
 </head>
 <body>
     <h2 style="width:100%;text-align:center;">PSCF - Polymer Self-Consistent Field Theory Computation</h2>
@@ -23,14 +37,16 @@
 	        <div style="margin:5px 10px 5px 20px">
 	          <button id="ifileb">Select Parameter File</button>
 	          <input  id="ifilei" type="file" style="display:none"/>
-	          <span   id="ifilen"></span>
+              <span   id="ifilen" style="margin-left:10px"></span>
 	        </div>
 	    </div>
+	    <hr style="border-width:2px"/>
 	    <div style="margin-top: 10px">
 	        Execute PSCF with the selected parameter file.<br/>
 	        <div style="margin:5px 10px 5px 20px">
 	            <button id="eabort">Execute</button>
-			    <div id="feplot" style="width:750px;height:150px;"></div>
+                <span   id="efilen" style="margin-left:10px;"></span>
+			    <div id="feplot" style="width:750px;height:150px;margin-top:10px;"></div>
 			    <table style="margin-top:20px;width:100%;border-collapse:collapse;">
 			        <tr>
 			            <td width="550px">Stdout:</td>
@@ -50,59 +66,26 @@
     </div>
 
     <script>
-	    // <![CDATA[
-	    var win = nw.Window.get();
-	    win.showDevTools();
-
-        // Loading with src tag and link with href doesn't work with local files for node.js.
-        // Load the related files by hand.
-        window.$ = window.jQuery = require('./jquery-3.1.0.js');
-/*            
-        $("head").append("<link>");
-        $("head").children(":last").attr({
-            rel:  "stylesheet",
-            type: "text/css",
-            href: "jquery.jqplot.min.css"
-        });
-
-        require('./jquery.jqplot.min.js');
-        var jCanvas = require('./jcanvas.js');
-        var d3  = require('./d3.v3.min.js');
-        $.getScript('./dex.min.js').done(function(){
-
-        var DexComponent = dex.DexComponent;
-        var ParallelCoordinates = require('./dex/component/d3/ParallelCoordinates.js');
-        var THREE = require('./three.min.js');
-        var DensityPlot3D = require('./DensityPlot3D.js');
-
-        var scriptList = [
-            './jquery.jqplot.min.js',
-            './jcanvas.js',
-            './d3.v3.min.js',
-            './dex.min.js',
-            './dex/component/d3/ParallelCoordinates.js',
-            './three.min.js');
-            './DensityPlot3D.js'
-        ];
-        */
-</script>
-<script src="./jquery.jqplot.min.js"></script>
-<script src="./jcanvas.js"></script>
-<script src="./d3.v3.min.js"></script>
-<script src="./dex.min.js"></script>
-<script src="./dex/component/d3/ParallelCoordinates.js"></script>
-<script src="./three.min.js"></script>
-<script src="./DensityPlot3D.js"></script>
-<script>
+        // <![CDATA[
         var fs        = require('fs');
         var spawn     = require('child_process').spawn;
         var path      = require('path');
 
-        var pscf                = undefined;
-        var pscfAbort           = false;
-        var freeEnergyList      = [];
-        var freeEnergyPlotRange = [0.,1.,0.,1.];
-        var iterationCount      = 0;
+        var pscf;
+        var pscfAbort;
+        var freeEnergyList;
+        var freeEnergyPlotRange;
+        var iterationCount;
+        
+        function clearPscfState () {
+            pscf                = undefined;
+            pscfAbort           = false;
+            freeEnergyList      = [];
+            freeEnergyPlotRange = [0,5,0,1];
+            iterationCount      = 0;
+            drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
+            drawDensityPlot   ('d3plot',[[0,0,0,0],[.5,.5,.5,1],[.5,.5,.5,1],[1,1,1,0]],0.01,$('#d3plot').width(),$('#d3plot').height());
+        }
         
         function notePscfState () {
             if (pscf == undefined) {
@@ -126,10 +109,6 @@
           var jPlot = undefined;
           var pFreeEnergy = freeEnergy;
           var pFreeEnergyPlotRange = freeEnergyPlotRange;
-          if (pFreeEnergy.length == 0) {
-              pFreeEnergy          = [[0,0],[0,0]];
-              pFreeEnergyPlotRange = [0,10,0,2];
-          }
           if ($('#'+elementID).length > 0) {
             w = w || 150;
             h = h || 100;
@@ -163,24 +142,23 @@
                         }
                       }
                     },
-                    noDataIndicator: { show        : true,
-                      width                 : w,
-                      height                : h,
-                      indicator             : "No Data Available", 
-                      axes                  : {
-                        show                : true,
-                        xaxis               : {
+                    noDataIndicator: {
+                      show                  : true,
+                      indicator             : "",
+                      // NOTE: jqplot needs tickInterval defined for noDataIndicator.
+                      axes : {
+                    	xaxis : {
                           min               : pFreeEnergyPlotRange[0],
                           max               : pFreeEnergyPlotRange[1],
-                          showLabel         : true,
-                          label             : "Iteration",
-                          tickOptions       : { formatString : "%d" }, 
-                        }, 
-                        yaxis: {
+                          tickInterval      : (pFreeEnergyPlotRange[1]-pFreeEnergyPlotRange[0])/5,
+                          show              : true
+                    	},
+                        yaxis : {
                           min               : pFreeEnergyPlotRange[2],
-                          max               : pFreeEnergyPlotRange[3], 
-                          tickOptions       : { formatString : "%.10f" }, 
-                        } 
+                          max               : pFreeEnergyPlotRange[3],
+                          tickInterval      : (pFreeEnergyPlotRange[3]-pFreeEnergyPlotRange[2])/5,
+                          show              : true
+                        }
                       }
                     }
                   }
@@ -192,7 +170,7 @@
           return jPlot;
         }
 
-        function drawDensityPlot(elementID,densities_p,w,h) {
+        function drawDensityPlot(elementID,densities_p,maxXYZRes,w,h) {
           var jPlot = undefined;
           if ($('#'+elementID).length > 0) {
             try {
@@ -200,15 +178,15 @@
               h = h || 100;
               $('#'+elementID+" canvas").remove();
               var csv = {
-                'header'  : ["X","Y","Z","A","B","C"],
-                'data'    : densities_p
+                'header'   : ["X","Y","Z","A","B","C"],
+                'data'     : densities_p,
+                'maxXYZRes': maxXYZRes
               };
               jPlot = new DensityPlot3D({
                 'parent'  : document.getElementById(elementID),
                 'csv'     : csv,
                 'width'   : w, 
-                'height'  : h//,
-                //'center'  : [5,5,5]
+                'height'  : h
               });
               jPlot.render();
             } catch (err) {
@@ -283,11 +261,10 @@
                         }
                     }
                 }
-                drawDensityPlot(elementId,densities,w,h);
+                drawDensityPlot(elementId,densities,1000.0,w,h);
             });
         }
         function processStdout ( d ) {
-            //$('#stdout').append(data);
             var stdout = document.getElementById('stdout');
             stdout.value += d;
             stdout.scrollTop = stdout.scrollHeight;
@@ -323,73 +300,100 @@
                     drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
                 }
             }
+            
+            if (pscfAbort) {
+                stdout.value += '\n\n********** PSCF execution aborted. **********\n';
+                stdout.scrollTop = stdout.scrollHeight;
+                pscf.kill();
+            }
         }
         
-        
-        
-        
-		    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
-		    $('#ifilei').on('change',function(){$('#ifilen').text($('#ifilei').val());notePscfState();});
-		    $('#eabort').on('click' ,function(){
-	            var ifilePath = $('#ifilei').val();
-	            var istring   = fs.readFileSync(ifilePath,'utf8');
-	            var sweep     = 0;
-	            if (m = /\r?\n *SWEEP.*?\r?\n *s_max *\r?\n *([\-+0-9.Ee]+)/.exec(istring)) {
-	            	sweep     = Number(m[1]);
-	            }
-	            var rhoPaths   = [];
-	            if (m = /\r?\n *FIELD_TO_RGRID *\r?\n.*?\r?\n(.*?)\r?\n.*?\r?\n(.*?)\r?\n/.exec(istring)) {
-	            	rhoPaths.push = path.dirname(ifilePath)+path.sep+m[2];
-	            }
-	            if (rhoPaths.length == 0) {
-                    var f2rg = "";
-	            	if (sweep == 0) {
-	                    f2rg += "\n"+
-	                            "FIELD_TO_RGRID"                         +"\n"+
-	                            " input_filename" +"\n"+" 'out/rho'"     +"\n"+
-	                            " output_filename"+"\n"+" 'out/rho.grid'"+"\n";
-	                    rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+"rho.grid");
-	            	} else {
-	            		for (var i=0; i<=sweep; i++) {
-	                        f2rg += "\n"+
-	                                "FIELD_TO_RGRID"                               +"\n"+
-	                                " input_filename" +"\n"+" 'out/"+i+".rho'"     +"\n"+
-	                                " output_filename"+"\n"+" 'out/"+i+".rho.grid'"+"\n";
-	                        rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+i+".rho.grid");
-	            		}
-	            	}
-		            istring = istring.replace(/\nFINISH/,f2rg+"\nFINISH\n");
-	            }
-	            pscf = spawn(
-	            	'pscf',
-	            	[],
-	            	{
-	            		cwd   : path.dirname(ifilePath),
-	            	    stdio : [
-	            	        'pipe', //fs.openSync(ifilePath,'r'),
-	            	        'pipe',
-	            	        'pipe'
-	            	    ]
-	            	}
-	            );
-	            pscf.stdout.on('data',processStdout);
-	            pscf.on('close',function(code){
-	            	plotDensities('d3plot',rhoPaths,$('#d3plot').width(),$('#d3plot').height());
-	            });
-	            pscf.stdin.write(istring);
-	            
-	            /*
-	            pscf.stderr.on('data',function(data){
-	            	$('#stdout').append('<span style="font-color:red">'+data+'</span>');
-	            });
-	            */
-		    });
-	
-	        drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
-	        drawDensityPlot   ('d3plot',[[0,0,0,0]],$('#d3plot').width(),$('#d3plot').height());
-	        
-		    notePscfState();
+	    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
+	    $('#ifilei').on('change',function(){$('#ifilen').text($('#ifilei').val());notePscfState();});
+	    $('#eabort').on('click' ,function(){
+            // If "Abort" clicked, queue the abort for processStdout to handle.
+	    	if (pscf != undefined) {
+	    		pscfAbort = true;
+	    		notePscfState();
+	    		return;
+	    	}
+	    	
+            // Clear values and plots for new execution.
+	    	clearPscfState();
+	    	
+            // Note the full file name of the path being used as the input parameter file.
+            var ifilePath = $('#ifilei').val();
+            $('#efilen').text(ifilePath);
+            
+            // Load in the entire parameter file as istring so we can scan/edit it.
+            var istring   = fs.readFileSync(ifilePath,'utf8');
+            
+            // If it's a "sweep" execution, note the number of sweeps.
+            var sweep     = 0;
+            if (m = /\r?\n *SWEEP.*?\r?\n *s_max *\r?\n *([\-+0-9.Ee]+)/.exec(istring)) {
+            	sweep     = Number(m[1]);
+            }
+            // If a RGRID will be calculated, note the output location.
+            var rhoPaths   = [];
+            if (m = /\r?\n *FIELD_TO_RGRID *\r?\n.*?\r?\n(.*?)\r?\n.*?\r?\n *\'(.*?)\'.*\r?\n/.exec(istring)) {
+            	rhoPaths.push(path.dirname(ifilePath)+path.sep+m[2]);
+            }
+            // If an RGRID will not be calculated, get one calculated for all '*rho' files as '*rho.grid'.
+            if (rhoPaths.length == 0) {
+                var f2rg = "";
+            	if (sweep == 0) {
+                    f2rg += "\n"+
+                            "FIELD_TO_RGRID"                         +"\n"+
+                            " input_filename" +"\n"+" 'out/rho'"     +"\n"+
+                            " output_filename"+"\n"+" 'out/rho_grid'"+"\n";
+                    rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+"rho.grid");
+            	} else {
+            		for (var i=0; i<=sweep; i++) {
+                        f2rg += "\n"+
+                                "FIELD_TO_RGRID"                               +"\n"+
+                                " input_filename" +"\n"+" 'out/"+i+".rho'"     +"\n"+
+                                " output_filename"+"\n"+" 'out/"+i+".rho_grid'"+"\n";
+                        rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+i+".rho_grid");
+            		}
+            	}
+	            istring = istring.replace(/\nFINISH/,f2rg+"\nFINISH\n");
+            }
+            // Create a subprocess for running pscf where we provide/read stdin/stdout.
+            pscf = spawn(
+            	'pscf',
+            	[],
+            	{
+            		cwd   : path.dirname(ifilePath),
+            	    stdio : [
+            	        'pipe', //fs.openSync(ifilePath,'r'),
+            	        'pipe',
+            	        'pipe'
+            	    ]
+            	}
+            );
+            // Note handlers for stdout/stderr.
+            pscf.stdout.on('data',processStdout);
+            pscf.stderr.on('data',function(data){
+                var stdout = document.getElementById('stdout');
+                stdout.value += data;
+                stdout.scrollTop = stdout.scrollHeight;
+            });
+            // Add handler for 'close' event when processing completes.
+            pscf.on('close',function(code){
+            	plotDensities('d3plot',rhoPaths,$('#d3plot').width(),$('#d3plot').height());
+            	pscf = undefined;
+            	notePscfState();
+            });
 
+            notePscfState();
+            
+            // Feed pscf the edited stdin file.
+            pscf.stdin.write(istring);
+	    });
+
+	    clearPscfState();
+	    notePscfState();
+	    
 	    // ]]>
     </script>
 </body>

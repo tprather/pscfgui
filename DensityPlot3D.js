@@ -13,7 +13,8 @@ function DensityPlot3D(userConfig)
     {
     	// Give folks without data something to look at anyhow.
     	'header'         : [ "X", "Y", "Z" ],
-    	'data'           : [[0,0,0],[1,1,1],[2,4,8],[3,9,27]]
+    	'data'           : [[0,0,0],[1,1,1],[2,4,8],[3,9,27]],
+        'maxXYZres'      : 1.0
     },
     'width'            : 400,
     'height'           : 400,
@@ -85,6 +86,7 @@ function DensityPlot3D(userConfig)
 //  renderer.setClearColor(0xFFFDF6,1.0);
     renderer.setClearColor(0xFFFFFF,1.0);
 
+
     // Set up some handy local variables describing the data range.
     var x0   = dex.matrix.min(csv.data,0);
     var x1   = dex.matrix.max(csv.data,0);
@@ -102,6 +104,14 @@ function DensityPlot3D(userConfig)
     var yMid = y0+0.5*yRng;
     var zMid = z0+0.5*zRng;
     var vMid = v0+0.5*vRng;
+
+    var rangeScale = 3.0;
+    xRng *= rangeScale;
+    yRng *= rangeScale;
+    zRng *= rangeScale;
+    x0 = xMid - 0.5*xRng;   x1 = xMid + 0.5*xRng;
+    y0 = yMid - 0.5*yRng;   y1 = yMid + 0.5*yRng;
+    z0 = zMid - 0.5*zRng;   z1 = zMid + 0.5*zRng;
 
     // Cube the density values for nicer separation between bands when plotting.
     function den ( v ) { return (v-v0)*(v-v0)*(v-v0); }
@@ -131,31 +141,32 @@ function DensityPlot3D(userConfig)
       v(x0,y0,z0),  v(x1,y0,z0),
       v(x0,y1,z1),  v(x1,y1,z1),
       v(x0,y0,z1),  v(x1,y0,z1),
-      
-      v(x0, 0,z1),  v(x1, 0,z1),
-      v(x0, 0,z0),  v(x1, 0,z0),
-      v(x0,y1, 0),  v(x1,y1, 0),
-      v(x0,y0, 0),  v(x1,y0, 0),
 
       v(x1,y0,z0),  v(x1,y1,z0),
       v(x0,y0,z0),  v(x0,y1,z0),
       v(x1,y0,z1),  v(x1,y1,z1),
       v(x0,y0,z1),  v(x0,y1,z1),
 
+      v(x1,y1,z0),  v(x1,y1,z1),
+      v(x1,y0,z0),  v(x1,y0,z1),
+      v(x0,y1,z0),  v(x0,y1,z1),
+      v(x0,y0,z0),  v(x0,y0,z1)
+/*      
+      v(x0, 0,z1),  v(x1, 0,z1),
+      v(x0, 0,z0),  v(x1, 0,z0),
+      v(x0,y1, 0),  v(x1,y1, 0),
+      v(x0,y0, 0),  v(x1,y0, 0),
+
       v( 0,y0,z1),  v( 0,y1,z1),
       v( 0,y0,z0),  v( 0,y1,z0),
       v(x1,y0, 0),  v(x1,y1, 0),
       v(x0,y0, 0),  v(x0,y1, 0),
 
-      v(x1,y1,z0),  v(x1,y1,z1),
-      v(x1,y0,z0),  v(x1,y0,z1),
-      v(x0,y1,z0),  v(x0,y1,z1),
-      v(x0,y0,z0),  v(x0,y0,z1),
-
       v(x0, 0,z0),  v(x0, 0,z1),
       v(x1, 0,z0),  v(x1, 0,z1),
       v( 0,y1,z0),  v( 0,y1,z1),
       v( 0,y0,z0),  v( 0,y0,z1)
+*/
     );
 
     var xAxisMat      = new THREE.LineBasicMaterial({ color : 0xff0000, lineWidth : 1 });
@@ -215,15 +226,16 @@ function DensityPlot3D(userConfig)
 
 //  var colors    = ['#CCCCCC','#008C47','#0185A9','#F37D22','#663C91','#A11D20','#B33893']; // Mixed palette.
 //  var colors    = ['#FFFFFF','#FEFEFE','#FFE5D9','#FCAF92','#FA6948','#DE2C26','#A60F14']; // Red/maroon palette.
-    var colors    = ['#FFFFFF','#C1E1D6','#B0D8CC','#99CCBC','#7FBCA7','#5DA593','#358270']; // Teal/gree  palette.
+    var colors    = ['#FFFFFF','#C1E1D6','#B0D8CC','#99CCBC','#7FBCA7','#5DA593','#358270']; // Teal/green palette.
+    var maxPsize  = 0.70*Math.max(config.width,config.height)/(Math.max(xRng,yRng,zRng)/csv.maxXYZRes);
     var valueBins = [
-      { color: new THREE.Color(colors[0]), alpha: 0.00, psize: 1.0 },
-      { color: new THREE.Color(colors[1]), alpha: 0.05, psize: 1.0 },
-      { color: new THREE.Color(colors[2]), alpha: 0.10, psize: 1.0 },
-      { color: new THREE.Color(colors[3]), alpha: 0.10, psize: 2.0 },
-      { color: new THREE.Color(colors[4]), alpha: 0.20, psize: 2.0 },
-      { color: new THREE.Color(colors[5]), alpha: 0.20, psize: 3.0 },
-      { color: new THREE.Color(colors[6]), alpha: 0.30, psize: 4.0 }
+      { color: new THREE.Color(colors[0]), alpha: 0.00, psize: 0.01*maxPsize },
+      { color: new THREE.Color(colors[1]), alpha: 0.05, psize: 0.05*maxPsize },
+      { color: new THREE.Color(colors[2]), alpha: 0.10, psize: 0.10*maxPsize },
+      { color: new THREE.Color(colors[3]), alpha: 0.20, psize: 0.30*maxPsize },
+      { color: new THREE.Color(colors[4]), alpha: 0.30, psize: 0.50*maxPsize },
+      { color: new THREE.Color(colors[5]), alpha: 0.40, psize: 0.75*maxPsize },
+      { color: new THREE.Color(colors[6]), alpha: 0.50, psize: 1.00*maxPsize }
     ];
 
     attributes    = {
@@ -273,17 +285,33 @@ function DensityPlot3D(userConfig)
                 dRng = 1.;
                 console.log("WARNING! dRng = 0, switching to 1");
             }
+            dlist = [];
+            for (i=0; i<csv.data.length; i++) {
+                dlist.push(den(csv.data[i][3]));
+            }
+            dlist.sort();
+            function vPercentileIndex ( d, dlist, numBins ) {
+                for (var b=1; b<numBins; b++) {
+                    var didx = Math.floor(b*dlist.length/numBins);
+                    if (d < dlist[didx]) {
+                        return b-1;
+                    }
+                }
+                return numBins-1;
+            }
             for (i = 0; i<csv.data.length; i++) {
                 var x = csv.data[i][0];
                 var y = csv.data[i][1];
                 var z = csv.data[i][2];
                 var v = csv.data[i][3];
                 var d = den(v);
-                var c = Math.min(Math.floor(valueBins.length*(d-d0)/dRng),valueBins.length-1);
+              //var c = Math.min(Math.floor(valueBins.length*(d-d0)/dRng),valueBins.length-1);
+                var c = vPercentileIndex(d,dlist,valueBins.length);
                 pointGeo.vertices     .push(new THREE.Vector3(x,y,z));
                 attributes.color.value.push(valueBins[c].color);
                 attributes.alpha.value.push(valueBins[c].alpha);
-                attributes.psize.value.push(valueBins[c].psize*config.height/300);
+                //attributes.psize.value.push(valueBins[c].psize*config.height/300);
+                attributes.psize.value.push(maxPsize*(d-d0)/(d1-d0));
             }
         } catch (err) { 
             console.log("Error setting attributes: " + err);
@@ -400,4 +428,3 @@ function DensityPlot3D(userConfig)
   return chart;
 }
 
-module.exports = DensityPlot3D;
