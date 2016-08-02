@@ -19,3 +19,6 @@ To build:
   nwb download -f normal
   nwb nwbuild 
   '''
+  
+  npm install nw-builder -g
+  

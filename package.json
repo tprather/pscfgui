@@ -1,13 +1,14 @@
 {
-  "name": "pscf",
+  "name": "pscfgui",
+  "version": "0.0.1",
   "main": "index.html",
   "chromium-args": "--mixed-context",
   "window": {
-    "min_width" : 800,
-    "width"     : 800,
-    "max_width" : 800,
-    "min_height": 610,
-    "height"    : 610,
-    "max_height": 610
+    "min_width" : 820,
+    "width"     : 820,
+    "max_width" : 820,
+    "min_height": 640,
+    "height"    : 640,
+    "max_height": 640
   }
 }
