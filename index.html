@@ -8,100 +8,284 @@
             height: 95%
         }
     </style>
+    <link   rel="stylesheet" type="text/css" href="./jquery.jqplot.min.css"/>
 </head>
 <body>
-    <h2>PSCF - Polymer Self-Consistent Field Theory Computation</h2>
-    <div>
-        <button id="ifileb">Select Input File</button>
-        <input  id="ifilei" type="file" style="display:none"/>
-        <span   id="ifilen"></span>
-    </div>
-    <div>
-        <button id="eabort">Execute</button>
-    </div>
-    <div id="feplot">
-    </div>
-    <div>
-        <textarea id="stdout" style="width:100%;height:300px;border: 1px solid gray; overflow-y:scroll;"></textarea>
+    <h2 style="width:100%;text-align:center;">PSCF - Polymer Self-Consistent Field Theory Computation</h2>
+    <div style="margin:10px">
+	    <div>
+	        Select the PSCF parameter file.<br/>
+	        <div style="margin:5px 10px 5px 20px">
+	          If the input "omega" file is referenced in the parameter file without
+	          an absolute path, it will be assumed to be relative to the parameter
+	          file location.
+	        </div>
+	        <div style="margin:5px 10px 5px 20px">
+	          <button id="ifileb">Select Parameter File</button>
+	          <input  id="ifilei" type="file" style="display:none"/>
+	          <span   id="ifilen"></span>
+	        </div>
+	    </div>
+	    <div style="margin-top: 10px">
+	        Execute PSCF with the selected parameter file.<br/>
+	        <div style="margin:5px 10px 5px 20px">
+	            <button id="eabort">Execute</button>
+			    <div id="feplot" style="width:750px;height:150px;"></div>
+			    <table style="margin-top:20px;width:100%;border-collapse:collapse;">
+			        <tr>
+			            <td width="550px">Stdout:</td>
+			            <td width="200px">R Grid:</td>
+			        </tr>
+			        <tr>
+			            <td width="550px" style="border:1px solid black;padding:0px;">
+			                <textarea id="stdout" style="width:550px;height:200px;border-width:0px;padding:0px;overflow-y:scroll;resize:none;"></textarea>
+			            </td>
+			            <td width="200px" style="border:1px solid black;padding:0px;">
+			                <div id="d3plot" style="width:200px;height:200px"></div>
+			            </td>
+			        </tr>
+			    </table>
+            </div>
+        </div>
     </div>
 
     <script>
 	    // <![CDATA[
+	    var win = nw.Window.get();
+	    win.showDevTools();
 
-        // Loading with src tag not working in node.js.  Load with require.
+        // Loading with src tag and link with href doesn't work with local files for node.js.
+        // Load the related files by hand.
         window.$ = window.jQuery = require('./jquery-3.1.0.js');
+/*            
+        $("head").append("<link>");
+        $("head").children(":last").attr({
+            rel:  "stylesheet",
+            type: "text/css",
+            href: "jquery.jqplot.min.css"
+        });
+
         require('./jquery.jqplot.min.js');
-        
-        var path      = require('path');
+        var jCanvas = require('./jcanvas.js');
+        var d3  = require('./d3.v3.min.js');
+        $.getScript('./dex.min.js').done(function(){
+
+        var DexComponent = dex.DexComponent;
+        var ParallelCoordinates = require('./dex/component/d3/ParallelCoordinates.js');
+        var THREE = require('./three.min.js');
+        var DensityPlot3D = require('./DensityPlot3D.js');
+
+        var scriptList = [
+            './jquery.jqplot.min.js',
+            './jcanvas.js',
+            './d3.v3.min.js',
+            './dex.min.js',
+            './dex/component/d3/ParallelCoordinates.js',
+            './three.min.js');
+            './DensityPlot3D.js'
+        ];
+        */
+</script>
+<script src="./jquery.jqplot.min.js"></script>
+<script src="./jcanvas.js"></script>
+<script src="./d3.v3.min.js"></script>
+<script src="./dex.min.js"></script>
+<script src="./dex/component/d3/ParallelCoordinates.js"></script>
+<script src="./three.min.js"></script>
+<script src="./DensityPlot3D.js"></script>
+<script>
         var fs        = require('fs');
         var spawn     = require('child_process').spawn;
-        var pscf      = undefined;
-        var pscfAbort = false;
+        var path      = require('path');
 
-	    function notePscfState () {
-	    	if (pscf == undefined) {
+        var pscf                = undefined;
+        var pscfAbort           = false;
+        var freeEnergyList      = [];
+        var freeEnergyPlotRange = [0.,1.,0.,1.];
+        var iterationCount      = 0;
+        
+        function notePscfState () {
+            if (pscf == undefined) {
                 $('#eabort').text('Execute');
-	    		if ($('#ifilei').val().trim()) {
+                if ($('#ifilei').val().trim()) {
                     $('#eabort').attr('disabled',false);
-	    		} else {
+                } else {
                     $('#eabort').attr('disabled',true );
-	    		}
-	    	} else {
+                }
+            } else {
                 $('#eabort').text('Abort');
-	    		if (!pscfAbort) {
+                if (!pscfAbort) {
                     $('#eabort').attr('disabled',false);
-	    		} else {
+                } else {
                     $('#eabort').attr('disabled',true );
-	    		}
-	    	}
-	    }
+                }
+            }
+        }
 
         function drawFreeEnergyPlot ( elementID, freeEnergy, freeEnergyPlotRange, w, h ) {
-    	  var jPlot = undefined;
-    	  pFreeEnergy = (freeEnergy.length) ? freeEnergy : null; 
-    	  if ($('#'+elementID).length > 0) {
-    	    w = w || 150;
-    	    h = h || 100;
-    	    try {
-    	      jPlot = $.jqplot(
-    	          elementID,
-    	          pFreeEnergy,
-    	          {
-    	            width          : w,
-    	            height         : h,
-    	            axesDefaults   : { numberTicks : 5, tickOptions : { show : true, showLabel : false, showGridLine : true } },
-    	            axes : {
-    	              xaxis        : { min : freeEnergyPlotRange[0], max : freeEnergyPlotRange[1] },
-    	              yaxis        : { min : freeEnergyPlotRange[2], max : freeEnergyPlotRange[3] },
-    	            },
-    	            seriesDefaults : { showMarker  : false },
-    	            legend         : { show        : false },
-    	            noDataIndicator: { show        : true, 
-    	                               indicator   : "No Data Available", 
-    	                               axes        : { 
-    	                                   numberTicks : 5, 
-    	                                   xaxis: { min : 0., max: 10. , 
-    	                                            tickOptions : { formatString : "%d" }, 
-    	                                            show: true 
-    	                                        }, 
-    	                                   yaxis: { min : 0., max: 10. , 
-    	                                            tickOptions : { formatString : "%d" }, 
-    	                                            show: true 
-    	                                        } 
-    	                                }
-    	                }
-    	          }
-    	      );
-    	    } catch (err) {
-    	        console.log("Error drawing FreeEnergy: " + err); 
-    	    }
-    	  }
-    	  return jPlot;
-    	}
-	    
-        var freeEnergyList = [];
-        var freeEnergyPlotRange = [0.,1.,0.,1.];
-        var iterationCount  = 0;
+          var jPlot = undefined;
+          var pFreeEnergy = freeEnergy;
+          var pFreeEnergyPlotRange = freeEnergyPlotRange;
+          if (pFreeEnergy.length == 0) {
+              pFreeEnergy          = [[0,0],[0,0]];
+              pFreeEnergyPlotRange = [0,10,0,2];
+          }
+          if ($('#'+elementID).length > 0) {
+            w = w || 150;
+            h = h || 100;
+            try {
+              $('#'+elementID).empty();
+              jPlot = $.jqplot(
+                  elementID,
+                  pFreeEnergy,
+                  {
+                    width          : w,
+                    height         : h,
+                    title          : 'Helmholtz Free Energy per Monomer / kT',
+                    seriesDefaults : { showMarker  : false },
+                    legend         : { show        : false },
+                    axesDefaults   : { numberTicks : 5, tickOptions : { show : true, showLabel : true, showGridLine : true } },
+                    axes : {
+                      xaxis : {
+                        min                 : pFreeEnergyPlotRange[0],
+                        max                 : pFreeEnergyPlotRange[1],
+                        showLabel           : true,
+                        label               : "Iteration",
+                        tickOptions : {
+                          formatString      : "%d"
+                        }
+                      },
+                      yaxis : {
+                        min                 : pFreeEnergyPlotRange[2],
+                        max                 : pFreeEnergyPlotRange[3],
+                        tickOptions : {
+                          formatString      : "%.10f"
+                        }
+                      }
+                    },
+                    noDataIndicator: { show        : true,
+                      width                 : w,
+                      height                : h,
+                      indicator             : "No Data Available", 
+                      axes                  : {
+                        show                : true,
+                        xaxis               : {
+                          min               : pFreeEnergyPlotRange[0],
+                          max               : pFreeEnergyPlotRange[1],
+                          showLabel         : true,
+                          label             : "Iteration",
+                          tickOptions       : { formatString : "%d" }, 
+                        }, 
+                        yaxis: {
+                          min               : pFreeEnergyPlotRange[2],
+                          max               : pFreeEnergyPlotRange[3], 
+                          tickOptions       : { formatString : "%.10f" }, 
+                        } 
+                      }
+                    }
+                  }
+              );
+            } catch (err) {
+                console.log("Error drawing FreeEnergy: " + err); 
+            }
+          }
+          return jPlot;
+        }
+
+        function drawDensityPlot(elementID,densities_p,w,h) {
+          var jPlot = undefined;
+          if ($('#'+elementID).length > 0) {
+            try {
+              w = w || 100;
+              h = h || 100;
+              $('#'+elementID+" canvas").remove();
+              var csv = {
+                'header'  : ["X","Y","Z","A","B","C"],
+                'data'    : densities_p
+              };
+              jPlot = new DensityPlot3D({
+                'parent'  : document.getElementById(elementID),
+                'csv'     : csv,
+                'width'   : w, 
+                'height'  : h//,
+                //'center'  : [5,5,5]
+              });
+              jPlot.render();
+            } catch (err) {
+                console.log("DrawDensityPlot ERR: " + err)
+            }
+          }
+          return jPlot;
+        }
+        
+        function plotDensities ( elementId, rfilePaths, w, h ) {
+            //var rfilePath = path.dirname(ifilePath) + path.sep + 'out' + path.sep + 'omega';
+            var rfilePath        = rfilePaths[rfilePaths.length-1];
+            var reNgrid          = /^ngrid/;
+            var reDimensions     = /^ +([0-9]+)(?: +([0-9]+) +([0-9]+))?/;
+            var reDensityValues  = /^ +([\-+0-9.Ee]+) +([\-+0-9.Ee]+)/;
+            fs.readFile(rfilePath,'utf8',function(err,data){
+                if (err) throw err;
+                var densities = [];
+                var dimLen    = [0,0,0];
+                var dims      = [0,0,0];
+                var lines = data.replace(/\r\n/g,"\n").split('\n');
+                var d0 = +Number.MAX_VALUE;
+                var d1 = -Number.MAX_VALUE;
+                var state = 0;
+                var match;
+                for (var i in lines) {
+                    var line = lines[i];
+                    switch (state) {
+                    case 0:
+                        if (match = reNgrid.exec(line)) {
+                            state = 1;
+                        }
+                        break;
+                    case 1:
+                        if (match = reDimensions.exec(line)) {
+                            if (match.length == 3) {
+                                dimLen[0] = Number(match[1]);
+                                dimLen[1] = Number(match[2]);
+                                dimLen[2] = Number(match[3]);
+                            } else {
+                                // Single number represents total rows in all dimensions.
+                                // In this case, only half of the x dimension is written.
+                                // (because FFT returns both + and - frequencies and we don't need half?)
+                                var n = Math.cbrt(2*Number(match[1]));
+                                dimLen[0] = n/2;
+                                dimLen[1] = n;
+                                dimLen[2] = n;
+                            }
+                            state = 2;
+                        }
+                        break;
+                    case 2:
+                        if (match = reDensityValues.exec(line)) {
+                            densities.push([
+                                1000.0*dims[0],
+                                1000.0*dims[1],
+                                1000.0*dims[2],
+                                100000.0*Math.sqrt(Number(match[1])*Number(match[1])+Number(match[2])*Number(match[2]))
+                            ]);
+                            dims[2] += 1;
+                            if (dims[2] >= dimLen[2]) {
+                                dims[2] = 0;
+                                dims[1] += 1;
+                                if (dims[1] >= dimLen[1]) {
+                                    dims[1] = 0;
+                                    dims[0] += 1;
+                                    if (dims[0] >= dimLen[0]) {
+                                        state = 3;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                drawDensityPlot(elementId,densities,w,h);
+            });
+        }
         function processStdout ( d ) {
             //$('#stdout').append(data);
             var stdout = document.getElementById('stdout');
@@ -113,55 +297,99 @@
             var reIterationEnergy = /^f_Helmholtz += +([\-+0-9.Ee]+)/;
             var lines = d.toString().replace(/\r\n/g,"\n").split('\n');
             for (var lnum in lines) {
-            	line = lines[lnum];
-            	var match = null; 
+                line = lines[lnum];
+                var match = null; 
                 if ((match = reIterationStart.exec(line)) != null) {
                     console.log('Iteration start');
+                    freeEnergyList.push([])
                 }
                 if ((match = reIterationCount.exec(line)) != null) {
                     console.log('Iteration = '+match[1]);
-                	iterationCount = match[1];
+                    iterationCount = Number(match[1]);
                     freeEnergyPlotRange[0] = Math.min(freeEnergyPlotRange[0],iterationCount);
                     freeEnergyPlotRange[1] = Math.max(freeEnergyPlotRange[1],iterationCount);
                 }
                 if ((match = reIterationEnergy.exec(line)) != null) {
                     console.log('Free Energy = '+match[1]);
-                    var freeEnergy = match[1];
-                	freeEnergyList.push([iterationCount,freeEnergy]);
-                    freeEnergyPlotRange[2] = Math.min(freeEnergyPlotRange[2],freeEnergy);
-                    freeEnergyPlotRange[3] = Math.max(freeEnergyPlotRange[3],freeEnergy);
-                    drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,700,200);
+                    var freeEnergy = Number(match[1]);
+                    freeEnergyList[freeEnergyList.length-1].push([iterationCount,freeEnergy]);
+                    if ((freeEnergyList.length == 1) && (freeEnergyList[0].length == 1)) {
+                        freeEnergyPlotRange[2] = freeEnergy - 0.001;
+                        freeEnergyPlotRange[3] = freeEnergy + 0.001;
+                    } else {
+                        freeEnergyPlotRange[2] = Math.min(freeEnergyPlotRange[2],freeEnergy);
+                        freeEnergyPlotRange[3] = Math.max(freeEnergyPlotRange[3],freeEnergy);
+                    }
+                    drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
                 }
             }
         }
-	    
-	    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
-	    $('#ifilei').on('change',function(){$('#ifilen').text($('#ifilei').val());notePscfState();});
-	    $('#eabort').on('click' ,function(){
-            ifilePath = $('#ifilei').val();
-            pscf = spawn(
-            	'pscf',
-            	[],
-            	{
-            		cwd   : path.dirname(ifilePath),
-            	    stdio : [
-            	        fs.openSync(ifilePath,'r'),
-            	        'pipe',
-            	        'pipe'
-            	    ]
-            	}
-            );
-            pscf.stdout.on('data',processStdout);
-            /*
-            pscf.stderr.on('data',function(data){
-            	$('#stdout').append('<span style="font-color:red">'+data+'</span>');
-            });
-            */
-	    });
+        
+        
+        
+        
+		    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
+		    $('#ifilei').on('change',function(){$('#ifilen').text($('#ifilei').val());notePscfState();});
+		    $('#eabort').on('click' ,function(){
+	            var ifilePath = $('#ifilei').val();
+	            var istring   = fs.readFileSync(ifilePath,'utf8');
+	            var sweep     = 0;
+	            if (m = /\r?\n *SWEEP.*?\r?\n *s_max *\r?\n *([\-+0-9.Ee]+)/.exec(istring)) {
+	            	sweep     = Number(m[1]);
+	            }
+	            var rhoPaths   = [];
+	            if (m = /\r?\n *FIELD_TO_RGRID *\r?\n.*?\r?\n(.*?)\r?\n.*?\r?\n(.*?)\r?\n/.exec(istring)) {
+	            	rhoPaths.push = path.dirname(ifilePath)+path.sep+m[2];
+	            }
+	            if (rhoPaths.length == 0) {
+                    var f2rg = "";
+	            	if (sweep == 0) {
+	                    f2rg += "\n"+
+	                            "FIELD_TO_RGRID"                         +"\n"+
+	                            " input_filename" +"\n"+" 'out/rho'"     +"\n"+
+	                            " output_filename"+"\n"+" 'out/rho.grid'"+"\n";
+	                    rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+"rho.grid");
+	            	} else {
+	            		for (var i=0; i<=sweep; i++) {
+	                        f2rg += "\n"+
+	                                "FIELD_TO_RGRID"                               +"\n"+
+	                                " input_filename" +"\n"+" 'out/"+i+".rho'"     +"\n"+
+	                                " output_filename"+"\n"+" 'out/"+i+".rho.grid'"+"\n";
+	                        rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+i+".rho.grid");
+	            		}
+	            	}
+		            istring = istring.replace(/\nFINISH/,f2rg+"\nFINISH\n");
+	            }
+	            pscf = spawn(
+	            	'pscf',
+	            	[],
+	            	{
+	            		cwd   : path.dirname(ifilePath),
+	            	    stdio : [
+	            	        'pipe', //fs.openSync(ifilePath,'r'),
+	            	        'pipe',
+	            	        'pipe'
+	            	    ]
+	            	}
+	            );
+	            pscf.stdout.on('data',processStdout);
+	            pscf.on('close',function(code){
+	            	plotDensities('d3plot',rhoPaths,$('#d3plot').width(),$('#d3plot').height());
+	            });
+	            pscf.stdin.write(istring);
+	            
+	            /*
+	            pscf.stderr.on('data',function(data){
+	            	$('#stdout').append('<span style="font-color:red">'+data+'</span>');
+	            });
+	            */
+		    });
+	
+	        drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
+	        drawDensityPlot   ('d3plot',[[0,0,0,0]],$('#d3plot').width(),$('#d3plot').height());
+	        
+		    notePscfState();
 
-        drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,700,200);
-	    
-	    notePscfState();
 	    // ]]>
     </script>
 </body>
