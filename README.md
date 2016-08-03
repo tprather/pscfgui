@@ -4,11 +4,33 @@ PSCFGUI
 The pscfgui application can be built for all of the possible platforms
 using just one of the possible platforms.
 
-  - For building on linux, download node.js before downloading nw.js:
+  - If you happen to be building on linux, you must download node.js before
+    downloading nw.js:
 
       ```
       sudo apt-get install node.js
       ```
+      
+    And, to get support for 3D density grid plots, you need OpenGL support
+    as provided by Mesa.
+    
+      ```
+      sudo apt-get install chromium-chromedriver
+      sudo apt-get install chromium-browser
+      
+      
+      sudo apt-get install libdrm-dev
+      sudo apt-get install x11proto-dri3-dev,x11proto-present-dev
+      sudo apt-get install llvm-dev
+      cd <directory-where-you-can-build-mesa-source>
+      wget https://mesa.freedesktop.org/archive/12.0.1/mesa-12.0.1.tar.gz
+      tar zxf mesa-12.0.1.tar.gz
+      cd mesa-12.0.1
+      configure --enable-gles1 --enable-gles2
+      make
+      ```
+
+The rest of the instructions should apply to building on any of the platforms.
 
   - Install NW.js from http://nwjs.io/downloads/.
   
@@ -17,6 +39,13 @@ using just one of the possible platforms.
       > 
       > Unzip the downloaded file and put the resulting directory in your path.
       
+  - Install keypress.
+  
+      ```
+      # npm install keypress
+      npm install terminal-kit
+      ```
+
   - Install nw-builder
   
       ```

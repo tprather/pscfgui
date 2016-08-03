@@ -1,5 +1,5 @@
 // Based originally on three.js ScatterPlot3D
-function DensityPlot3D(userConfig)
+function DensityPlot3D(userConfig,rotation)
 {
   var chart = new DexComponent(userConfig,
   {
@@ -124,6 +124,13 @@ function DensityPlot3D(userConfig)
     var scatterPlot = new THREE.Object3D();
 
     scatterPlot.rotation.y = -0.2; //Math.PI-0.2; // radians
+
+    if (rotation) {
+      scatterPlot.rotation.x = rotation.x;
+      scatterPlot.rotation.y = rotation.y;
+      scatterPlot.rotation.z = rotation.z;
+    }
+    this.rotation = scatterPlot.rotation;
 
     function v ( x, y, z ) { return new THREE.Vector3(x,y,z); }
 
@@ -424,6 +431,10 @@ function DensityPlot3D(userConfig)
     };
 
   };
+
+  chart.getRotation = function () {
+    return this.rotation;
+  }
 
   return chart;
 }
