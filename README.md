@@ -10,25 +10,10 @@ using just one of the possible platforms.
       ```
       sudo apt-get install node.js
       ```
-      
-    And, to get support for 3D density grid plots, you need OpenGL support
-    as provided by Mesa.
+
+    And, to get support for 3D density grid plots, you need OpenGL support.
     
-      ```
-      sudo apt-get install chromium-chromedriver
-      sudo apt-get install chromium-browser
-      
-      
-      sudo apt-get install libdrm-dev
-      sudo apt-get install x11proto-dri3-dev,x11proto-present-dev
-      sudo apt-get install llvm-dev
-      cd <directory-where-you-can-build-mesa-source>
-      wget https://mesa.freedesktop.org/archive/12.0.1/mesa-12.0.1.tar.gz
-      tar zxf mesa-12.0.1.tar.gz
-      cd mesa-12.0.1
-      configure --enable-gles1 --enable-gles2
-      make
-      ```
+      TBD - Not sure what this requires on linux or OS X.
 
 The rest of the instructions should apply to building on any of the platforms.
 
@@ -39,13 +24,6 @@ The rest of the instructions should apply to building on any of the platforms.
       > 
       > Unzip the downloaded file and put the resulting directory in your path.
       
-  - Install keypress.
-  
-      ```
-      # npm install keypress
-      npm install terminal-kit
-      ```
-
   - Install nw-builder
   
       ```

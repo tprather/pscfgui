@@ -30,8 +30,8 @@
 	    <div>
 	        Select the PSCF parameter file.<br/>
 	        <div style="margin:5px 10px 5px 20px">
-	          If the input "omega" file is referenced in the parameter file without
-	          an absolute path, it will be assumed to be relative to the parameter
+	          If the input "omega" file is referenced in the parameter file with
+	          a relative path, it will be assumed to be relative to the parameter
 	          file location.
 	        </div>
 	        <div style="margin:5px 10px 5px 20px">
@@ -58,11 +58,11 @@
 			            </td>
 			            <td width="200px" style="border:1px solid black;padding:0px;">
 			                <div id="d3plot" style="width:200px;height:200px"></div>
-			                <table border="0" style="border-collapse:collapse;">
+			                <table style="border-collapse:collapse;border-width:0px;">
 			                    <tr>
-                                    <td><button id="d3prev" style="width:82px;height:20px;float:left;" >&lt;</button></td>
-                                    <td><div    id="d3sidx" style="width:30px;height:20px;text-align:center;"></div></td>
-			                        <td><button id="d3next" style="width:83px;height:20px;float:right;">&gt;</button></td>
+                                    <td style="padding:0px"><button id="d3prev" style="width:80px;height:20px;float:left;" >&lt;</button></td>
+                                    <td style="padding:0px"><div    id="d3sidx" style="width:40px;height:20px;text-align:center;"></div></td>
+			                        <td style="padding:0px"><button id="d3next" style="width:81px;height:20px;float:right;">&gt;</button></td>
 			                    </tr>
 			                </table>
 			            </td>
@@ -74,68 +74,25 @@
 
     <script>
         // <![CDATA[
+        // Specifying an input parameter file will also attempt to display any previously
+        // stored output results.  Set the following true to show these as a movie as
+        // though pscf was being executed rather than just show the final results.
+        var parmFileMovie = false;
+        
         var fs        = require('fs');
         var spawn     = require('child_process').spawn;
         var path      = require('path');
 
-        var d3Plot          = undefined;
- 
-        var pscf;
-        var pscfAbort;
-        var freeEnergyList;
-        var freeEnergyPlotRange;
-        var iterationCount;
-        var sweep;
-        var sweepIdx;
-        var rhoPaths;
-        
-        function clearPscfState () {
-            pscf                = undefined;
-            pscfAbort           = false;
-            freeEnergyList      = [];
-            freeEnergyPlotRange = [0,5,0,1];
-            iterationCount      = 0;
-            sweep               = false;
-            sweepIdx            = 0;
-            rhoPaths            = [];
-            drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
-            drawDensityPlot   ('d3plot',[[0,0,0,0],[.5,.5,.5,1],[.5,.5,.5,1],[1,1,1,0]],0.01,$('#d3plot').width(),$('#d3plot').height());
-        }
-        
-        function notePscfState () {
-            if (pscf == undefined) {
-                $('#eabort').text('Execute');
-                if ($('#ifilei').val().trim()) {
-                    $('#eabort').attr('disabled',false);
-                } else {
-                    $('#eabort').attr('disabled',true );
-                }
-            } else {
-                $('#eabort').text('Abort');
-                if (!pscfAbort) {
-                    $('#eabort').attr('disabled',false);
-                } else {
-                    $('#eabort').attr('disabled',true );
-                }
-            }
-            $('#d3sidx').text((sweep)?sweepIdx:'');
-            $('#d3prev').attr('disabled',(!sweep)||(sweepIdx <= 0));
-            $('#d3sidx').attr('disabled',!sweep);
-            $('#d3next').attr('disabled',(!sweep)||(sweepIdx >= rhoPaths.length-1));
-        }
-
         function drawFreeEnergyPlot ( elementID, freeEnergy, freeEnergyPlotRange, w, h ) {
           var jPlot = undefined;
-          var pFreeEnergy = freeEnergy;
-          var pFreeEnergyPlotRange = freeEnergyPlotRange;
           if ($('#'+elementID).length > 0) {
-            w = w || 150;
-            h = h || 100;
+            w = w || $('#'+elementID).width()  || 150;
+            h = h || $('#'+elementID).height() || 150;
             try {
               $('#'+elementID).empty();
               jPlot = $.jqplot(
                   elementID,
-                  pFreeEnergy,
+                  freeEnergy,
                   {
                     width          : w,
                     height         : h,
@@ -145,8 +102,8 @@
                     axesDefaults   : { numberTicks : 5, tickOptions : { show : true, showLabel : true, showGridLine : true } },
                     axes : {
                       xaxis : {
-                        min                 : pFreeEnergyPlotRange[0],
-                        max                 : pFreeEnergyPlotRange[1],
+                        min                 : freeEnergyPlotRange[0],
+                        max                 : freeEnergyPlotRange[1],
                         showLabel           : true,
                         label               : "Iteration",
                         tickOptions : {
@@ -154,8 +111,8 @@
                         }
                       },
                       yaxis : {
-                        min                 : pFreeEnergyPlotRange[2],
-                        max                 : pFreeEnergyPlotRange[3],
+                        min                 : freeEnergyPlotRange[2],
+                        max                 : freeEnergyPlotRange[3],
                         tickOptions : {
                           formatString      : "%.10f"
                         }
@@ -167,15 +124,15 @@
                       // NOTE: jqplot needs tickInterval defined for noDataIndicator.
                       axes : {
                     	xaxis : {
-                          min               : pFreeEnergyPlotRange[0],
-                          max               : pFreeEnergyPlotRange[1],
-                          tickInterval      : (pFreeEnergyPlotRange[1]-pFreeEnergyPlotRange[0])/5,
+                          min               : freeEnergyPlotRange[0],
+                          max               : freeEnergyPlotRange[1],
+                          tickInterval      : (freeEnergyPlotRange[1]-freeEnergyPlotRange[0])/5,
                           show              : true
                     	},
                         yaxis : {
-                          min               : pFreeEnergyPlotRange[2],
-                          max               : pFreeEnergyPlotRange[3],
-                          tickInterval      : (pFreeEnergyPlotRange[3]-pFreeEnergyPlotRange[2])/5,
+                          min               : freeEnergyPlotRange[2],
+                          max               : freeEnergyPlotRange[3],
+                          tickInterval      : (freeEnergyPlotRange[3]-freeEnergyPlotRange[2])/5,
                           show              : true
                         }
                       }
@@ -183,18 +140,19 @@
                   }
               );
             } catch (err) {
-                console.log("Error drawing FreeEnergy: " + err); 
+              console.log("Error drawing FreeEnergy: " + err); 
             }
           }
           return jPlot;
         }
 
+        var d3Plot = undefined;
         function drawDensityPlot(elementID,densities_p,maxXYZRes,w,h) {
           if ($('#'+elementID).length > 0) {
             try {
-              w = w || 100;
-              h = h || 100;
-              d3r = undefined;
+              w = w || $('#'+elementID).width()  || 100;
+              h = h || $('#'+elementID).height() || 100;
+              var d3r = undefined;
               if (d3Plot) {
             	d3r = d3Plot.getRotation();
               }
@@ -218,15 +176,12 @@
           return d3Plot;
         }
         
-        function plotDensities ( elementId, w, h ) {
-            //var rfilePath = path.dirname(ifilePath) + path.sep + 'out' + path.sep + 'omega';
-            var rfileIdx         = (sweep)? sweepIdx : rhoPaths.length-1;
-            var rfilePath        = rhoPaths[rfileIdx];
+        function drawDensityPlotFromFile ( elementId, rfilePath, w, h ) {
             var reNgrid          = /^ngrid/;
             var reDimensions     = /^ +([0-9]+)(?: +([0-9]+) +([0-9]+))?/;
             var reDensityValues  = /^ +([\-+0-9.Ee]+) +([\-+0-9.Ee]+)/;
-            fs.readFile(rfilePath,'utf8',function(err,data){
-                if (err) throw err;
+            var data = fs.readFileSync(rfilePath,'utf8');
+            {
                 var densities = [];
                 var dimLen    = [0,0,0];
                 var dims      = [0,0,0];
@@ -285,32 +240,95 @@
                     }
                 }
                 drawDensityPlot(elementId,densities,1000.0,w,h);
-            });
+            }
         }
-        function processStdout ( d ) {
+
+        var d3Plot    = undefined;
+        
+        var pscf;
+        var pscfStdin;
+        var pscfAbort;
+        var ifilePath;
+        var ofilePath;
+        var rfilePaths;
+        var freeEnergyList;
+        var freeEnergyPlotRange;
+        var iterationCount;
+        var sweep;
+        var sweepIdx;
+        
+        function clearPscfState () {
+            pscf                = undefined;
+            pscfAbort           = false;
+            freeEnergyList      = [];
+            freeEnergyPlotRange = [0,5,0,1];
+            iterationCount      = 0;
+            sweepIdx            = 0;
+          	document.getElementById('stdout').value = '';
+            drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange);
+            drawDensityPlot   ('d3plot',[[0,0,0,0],[.5,.5,.5,1],[.5,.5,.5,1],[1,1,1,0]],0.01);
+        }
+        
+        function notePscfState () {
+            if (pscf == undefined) {
+                $('#eabort').text('Execute');
+                if ($('#ifilei').val().trim()) {
+                    $('#eabort').attr('disabled',false);
+                } else {
+                    $('#eabort').attr('disabled',true );
+                }
+            } else {
+                $('#eabort').text('Abort');
+                if (!pscfAbort) {
+                    $('#eabort').attr('disabled',false);
+                } else {
+                    $('#eabort').attr('disabled',true );
+                }
+            }
+            $('#d3sidx').text((sweep)?sweepIdx:'');
+            $('#d3prev').attr('disabled',(!sweep)||(sweepIdx <= 0));
+            $('#d3sidx').attr('disabled',!sweep);
+            $('#d3next').attr('disabled',(!sweep)||(sweepIdx >= rfilePaths.length-1));
+            if ($('.jqplot-series-canvas').length > 0) {
+	            for (var i in $('.jqplot-series-canvas')) {
+	            	var active = ((!sweep)||(i==sweepIdx));
+	            	$('.jqplot-series-canvas')[i].style.zIndex  = (active)?'1'  :'auto';
+	            	$('.jqplot-series-canvas')[i].style.opacity = (active)?'1.0':'0.1';
+	            }
+            }
+        }
+
+        function updateDensityPlot () {
+            var i = (sweep)? sweepIdx : 0;
+            drawDensityPlotFromFile('d3plot',rfilePaths[i]);
+        }
+        
+        function scanStdoutText ( d ) {
             var stdout = document.getElementById('stdout');
             stdout.value += d;
             stdout.scrollTop = stdout.scrollHeight;
             
+            var reSweepStart      = /^s += +([\-+0-9.Ee]+)/;
             var reIterationStart  = /^[*]{10,}/;
             var reIterationCount  = /^Iteration +([0-9]+)/;
             var reIterationEnergy = /^f_Helmholtz += +([\-+0-9.Ee]+)/;
             var lines = d.toString().replace(/\r\n/g,"\n").split('\n');
             for (var lnum in lines) {
                 line = lines[lnum];
-                var match = null; 
+                var match = null;
+                if ((match = reSweepStart.exec(line)) != null) {
+                	sweepIdx = Math.floor(Number(match[1]));
+                	updateDensityPlot();
+                }
                 if ((match = reIterationStart.exec(line)) != null) {
-                    console.log('Iteration start');
                     freeEnergyList.push([])
                 }
                 if ((match = reIterationCount.exec(line)) != null) {
-                    console.log('Iteration = '+match[1]);
                     iterationCount = Number(match[1]);
                     freeEnergyPlotRange[0] = Math.min(freeEnergyPlotRange[0],iterationCount);
                     freeEnergyPlotRange[1] = Math.max(freeEnergyPlotRange[1],iterationCount);
                 }
                 if ((match = reIterationEnergy.exec(line)) != null) {
-                    console.log('Free Energy = '+match[1]);
                     var freeEnergy = Number(match[1]);
                     freeEnergyList[freeEnergyList.length-1].push([iterationCount,freeEnergy]);
                     if ((freeEnergyList.length == 1) && (freeEnergyList[0].length == 1)) {
@@ -320,21 +338,86 @@
                         freeEnergyPlotRange[2] = Math.min(freeEnergyPlotRange[2],freeEnergy);
                         freeEnergyPlotRange[3] = Math.max(freeEnergyPlotRange[3],freeEnergy);
                     }
-                    drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange,$('#feplot').width(),$('#feplot').height());
+                    drawFreeEnergyPlot('feplot',freeEnergyList,freeEnergyPlotRange);
                 }
             }
-            
-            if (pscfAbort) {
-                stdout.value += '\n\n********** PSCF execution aborted. **********\n';
-                stdout.scrollTop = stdout.scrollHeight;
-                pscf.kill();
-            }
+            notePscfState();
         }
         
+        var stdoutLines   = undefined;
+        var stdoutLineIdx = 0;
+        function scanStdoutTextNextLine () {
+        	if (stdoutLineIdx < stdoutLines.length) {
+        		scanStdoutText(stdoutLines[stdoutLineIdx++]+'\n');
+        		setTimeout(scanStdoutTextNextLine,0);
+        		return;
+        	}
+        	try {
+              updateDensityPlot();
+        	} catch (e) {}
+        }
+        function scanStdoutTextLineByLine ( d ) {
+        	stdoutLines = d.toString().replace(/\r\n/g,"\n").split('\n');
+        	stdoutLineIdx = 0;
+        	scanStdoutTextNextLine();
+        }
+
+        function scanParameterFile ( pfilePath ) {
+        	ifilePath = pfilePath;
+        	ofilePath = ifilePath+".stdout.txt";
+            $('#efilen').text(ifilePath);
+            
+            // Load in the entire parameter file as istring so we can scan/edit it.
+            var istring   = fs.readFileSync(ifilePath,'utf8');
+            
+            // If it's a "sweep" execution, note the number of sweeps.
+            var sweepNum  = 0;
+            if (m = /\r?\n *SWEEP.*?\r?\n *s_max *\r?\n *([\-+0-9.Ee]+)/.exec(istring)) {
+                sweep    = true;
+                sweepNum = Number(m[1]);
+            }
+            // If a RGRID will be calculated, note the output location.
+            rfilePaths = [];
+            if (m = /\r?\n *FIELD_TO_RGRID *\r?\n.*?\r?\n(.*?)\r?\n.*?\r?\n *\'(.*?)\'.*\r?\n/.exec(istring)) {
+                rfilePaths.push(path.dirname(ifilePath)+path.sep+m[2]);
+            }
+            // If an RGRID will not be calculated, get one calculated for all '*rho' files as '*rho_grid'.
+            if (rfilePaths.length == 0) {
+                var f2rg = "";
+                if (sweepNum == 0) {
+                    f2rg += "\n"+
+                            "FIELD_TO_RGRID"                         +"\n"+
+                            " input_filename" +"\n"+" 'out/rho'"     +"\n"+
+                            " output_filename"+"\n"+" 'out/rho_grid'"+"\n";
+                    rfilePaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+"rho_grid");
+                } else {
+                    for (var i=0; i<=sweepNum; i++) {
+                        f2rg += "\n"+
+                                "FIELD_TO_RGRID"                               +"\n"+
+                                " input_filename" +"\n"+" 'out/"+i+".rho'"     +"\n"+
+                                " output_filename"+"\n"+" 'out/"+i+".rho_grid'"+"\n";
+                        rfilePaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+i+".rho_grid");
+                    }
+                }
+                istring = istring.replace(/\nFINISH/,f2rg+"\nFINISH\n");
+            }
+            
+            try {
+            	if (parmFileMovie) {
+            		scanStdoutTextLineByLine(fs.readFileSync(ofilePath,'utf8'));
+            	} else {
+            		scanStdoutText          (fs.readFileSync(ofilePath,'utf8'));
+            	}
+            } catch (e) {}
+            
+            return istring;
+        }
+
 	    $('#ifileb').on('click' ,function(){$('#ifilei').click();return false;                    });
 	    $('#ifilei').on('change',function(){
-	    	$('#ifilen').text($('#ifilei').val());notePscfState();
-	    	// TODO: Load any previously stored results for this input file.
+	    	$('#ifilen').text($('#ifilei').val());
+	    	clearPscfState();
+	    	pscfStdin = scanParameterFile($('#ifilen').text());
 	    });
 	    $('#eabort').on('click' ,function(){
             // If "Abort" clicked, queue the abort for processStdout to handle.
@@ -346,44 +429,12 @@
 	    	
             // Clear values and plots for new execution.
 	    	clearPscfState();
+            try {
+                fs.writeFileSync(ofilePath,'');
+            } catch (e) {
+           	    console.log("Error clearing '"+ofilePath+"': "+e);
+            }
 	    	
-            // Note the full file name of the path being used as the input parameter file.
-            var ifilePath = $('#ifilei').val();
-            $('#efilen').text(ifilePath);
-            
-            // Load in the entire parameter file as istring so we can scan/edit it.
-            var istring   = fs.readFileSync(ifilePath,'utf8');
-            
-            // If it's a "sweep" execution, note the number of sweeps.
-            var sweepNum  = 0;
-            if (m = /\r?\n *SWEEP.*?\r?\n *s_max *\r?\n *([\-+0-9.Ee]+)/.exec(istring)) {
-            	sweep    = true;
-            	sweepNum = Number(m[1]);
-            }
-            // If a RGRID will be calculated, note the output location.
-            if (m = /\r?\n *FIELD_TO_RGRID *\r?\n.*?\r?\n(.*?)\r?\n.*?\r?\n *\'(.*?)\'.*\r?\n/.exec(istring)) {
-            	rhoPaths.push(path.dirname(ifilePath)+path.sep+m[2]);
-            }
-            // If an RGRID will not be calculated, get one calculated for all '*rho' files as '*rho_grid'.
-            if (rhoPaths.length == 0) {
-                var f2rg = "";
-            	if (sweepNum == 0) {
-                    f2rg += "\n"+
-                            "FIELD_TO_RGRID"                         +"\n"+
-                            " input_filename" +"\n"+" 'out/rho'"     +"\n"+
-                            " output_filename"+"\n"+" 'out/rho_grid'"+"\n";
-                    rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+"rho_grid");
-            	} else {
-            		for (var i=0; i<=sweepNum; i++) {
-                        f2rg += "\n"+
-                                "FIELD_TO_RGRID"                               +"\n"+
-                                " input_filename" +"\n"+" 'out/"+i+".rho'"     +"\n"+
-                                " output_filename"+"\n"+" 'out/"+i+".rho_grid'"+"\n";
-                        rhoPaths.push(path.dirname(ifilePath)+path.sep+"out"+path.sep+i+".rho_grid");
-            		}
-            	}
-	            istring = istring.replace(/\nFINISH/,f2rg+"\nFINISH\n");
-            }
             // Create a subprocess for running pscf where we provide/read stdin/stdout.
             pscf = spawn(
             	'pscf',
@@ -398,7 +449,19 @@
             	}
             );
             // Note handlers for stdout/stderr.
-            pscf.stdout.on('data',processStdout);
+            pscf.stdout.on('data',function(data){
+                try {
+                    fs.appendFileSync(ofilePath,data);
+                } catch (e) {
+                    console.log("Error appending to '"+ofilePath+"': "+e);
+                }
+            	scanStdoutText(data);
+                if (pscfAbort) {
+                    stdout.value += '\n\n********** PSCF execution aborted. **********\n';
+                    stdout.scrollTop = stdout.scrollHeight;
+                    pscf.kill();
+                }
+            });
             pscf.stderr.on('data',function(data){
                 var stdout = document.getElementById('stdout');
                 stdout.value += data;
@@ -406,15 +469,15 @@
             });
             // Add handler for 'close' event when processing completes.
             pscf.on('close',function(code){
-            	plotDensities('d3plot',$('#d3plot').width(),$('#d3plot').height());
-            	pscf = undefined;
-            	notePscfState();
+                pscf = undefined;
+                notePscfState();
+            	updateDensityPlot();
             });
 
             notePscfState();
             
             // Feed pscf the edited stdin file.
-            pscf.stdin.write(istring);
+            pscf.stdin.write(pscfStdin);
 	    });
 	    
 	    $('#d3prev').on('click',function(){
@@ -422,22 +485,21 @@
 	    		if (sweepIdx > 0) {
 	    			sweepIdx--;
 	    			notePscfState();
-	    			plotDensities('d3plot',$('#d3plot').width(),$('#d3plot').height());
+	    			updateDensityPlot();
 	    		}
 	    	}
 	    });
         $('#d3next').on('click',function(){
             if (sweep) {
-                if (sweepIdx < rhoPaths.length-1) {
+                if (sweepIdx < rfilePaths.length-1) {
                     sweepIdx++;
                     notePscfState();
-                    plotDensities('d3plot',$('#d3plot').width(),$('#d3plot').height());
+                    updateDensityPlot();
                 }
             }
         });
 	    
 	    clearPscfState();
-	    notePscfState();
 	    
 	    // ]]>
     </script>
